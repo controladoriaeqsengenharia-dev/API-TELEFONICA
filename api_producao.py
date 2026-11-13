@@ -87,4 +87,4 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    ThreadingHTTPServer(("127.0.0.1", int(os.getenv("PORT", "8001"))), Handler).serve_forever()
+    ThreadingHTTPServer((os.getenv("BIND_HOST", "127.0.0.1"), int(os.getenv("PORT", "8001"))), Handler).serve_forever()

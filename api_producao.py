@@ -1,4 +1,5 @@
 import gzip
+from hmac import compare_digest
 import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -19,6 +20,7 @@ else:
         "password": os.environ["PGPASSWORD"],
     }
 API_KEY = os.environ["API_KEY"]
+READ_API_KEY = os.getenv("READ_API_KEY")
 MAX_BODY = 250 * 1024 * 1024
 
 SWAGGER_HTML = """<!doctype html>
@@ -142,8 +144,10 @@ def normalize(status):
 
 
 class Handler(BaseHTTPRequestHandler):
-    def authorized(self):
-        return self.headers.get("X-API-Key") == API_KEY
+    def authorized(self, *, leitura=False):
+        chave = self.headers.get("X-API-Key", "").encode()
+        esperada = READ_API_KEY if leitura and READ_API_KEY else API_KEY
+        return compare_digest(chave, esperada.encode())
 
     def send_json(self, status, payload):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -192,7 +196,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/openapi.json":
             self.send_json(200, OPENAPI)
             return
-        if not self.authorized():
+        if not self.authorized(leitura=True):
             self.send_json(404, {"erro": "não encontrado"})
             return
         url = urlsplit(self.path)

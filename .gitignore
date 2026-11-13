@@ -1,0 +1,4 @@
+__pycache__/
+.ssh-vps-known-hosts
+*.pyc
+.env

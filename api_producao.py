@@ -2,6 +2,7 @@ import gzip
 import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlsplit
 
 import psycopg
 
@@ -50,6 +51,15 @@ OPENAPI = {
     },
     "servers": [{"url": "/"}],
     "components": {
+        "parameters": {
+            "Limit": {
+                "name": "limit",
+                "in": "query",
+                "description": "Máximo de registros. Omita para receber a carga completa.",
+                "schema": {"type": "integer", "minimum": 1, "maximum": 1000},
+                "example": 10,
+            }
+        },
         "securitySchemes": {
             "ApiKeyAuth": {
                 "type": "apiKey",
@@ -87,6 +97,7 @@ OPENAPI = {
         "/telefonica": {
             "get": {
                 "summary": "Lista chamados gerais",
+                "parameters": [{"$ref": "#/components/parameters/Limit"}],
                 "security": [{"ApiKeyAuth": []}],
                 "responses": {"200": {"description": "Lista de chamados"}},
             }
@@ -94,6 +105,7 @@ OPENAPI = {
         "/telefonica-sp": {
             "get": {
                 "summary": "Lista chamados de São Paulo",
+                "parameters": [{"$ref": "#/components/parameters/Limit"}],
                 "security": [{"ApiKeyAuth": []}],
                 "responses": {"200": {"description": "Lista de chamados SP"}},
             }
@@ -183,16 +195,30 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authorized():
             self.send_json(404, {"erro": "não encontrado"})
             return
-        if self.path == "/telefonica-sp":
+        url = urlsplit(self.path)
+        if url.path == "/telefonica-sp":
             filtro = "ativo = 'SP'"
-        elif self.path == "/telefonica":
+        elif url.path == "/telefonica":
             filtro = "ativo <> 'SP' AND COALESCE(dados->>'UF', '') NOT IN ('1101505', '1101507', '1101509', '2100101B', '85009S0', 'EGS')"
         else:
             self.send_json(404, {"erro": "não encontrado"})
             return
+        query = f"SELECT n_os, dados FROM public.chamados WHERE {filtro}"
+        params = ()
+        limits = parse_qs(url.query, keep_blank_values=True).get("limit")
+        if limits is not None:
+            try:
+                limit = int(limits[0])
+            except ValueError:
+                limit = 0
+            if len(limits) != 1 or not 1 <= limit <= 1000:
+                self.send_json(400, {"erro": "limit deve ser um inteiro de 1 a 1000"})
+                return
+            query += " LIMIT %s"
+            params = (limit,)
         with open_database() as conexao:
             with conexao.cursor() as cursor:
-                cursor.execute(f"SELECT n_os, dados FROM public.chamados WHERE {filtro}")
+                cursor.execute(query, params)
                 resultado = []
                 for n_os, dados in cursor:
                     dados["N_OS"] = n_os

@@ -6,7 +6,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import psycopg
 
 
-DATABASE_URL = os.environ["DATABASE_URL"]
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    DATABASE_URL = {
+        "host": os.getenv("PGHOST", "127.0.0.1"),
+        "port": os.getenv("PGPORT", "5432"),
+        "dbname": os.environ["PGDATABASE"],
+        "user": os.environ["PGUSER"],
+        "password": os.environ["PGPASSWORD"],
+    }
 API_KEY = os.environ["API_KEY"]
 MAX_BODY = 250 * 1024 * 1024
 

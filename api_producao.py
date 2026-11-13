@@ -7,8 +7,10 @@ import psycopg
 
 
 DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    DATABASE_URL = {
+if DATABASE_URL:
+    DATABASE_CONNECTION = DATABASE_URL
+else:
+    DATABASE_CONNECTION = {
         "host": os.getenv("PGHOST", "127.0.0.1"),
         "port": os.getenv("PGPORT", "5432"),
         "dbname": os.environ["PGDATABASE"],
@@ -17,6 +19,12 @@ if not DATABASE_URL:
     }
 API_KEY = os.environ["API_KEY"]
 MAX_BODY = 250 * 1024 * 1024
+
+
+def open_database():
+    if isinstance(DATABASE_CONNECTION, str):
+        return psycopg.connect(DATABASE_CONNECTION)
+    return psycopg.connect(**DATABASE_CONNECTION)
 
 
 def normalize(status):
@@ -53,7 +61,7 @@ class Handler(BaseHTTPRequestHandler):
         if not linhas:
             self.send_json(400, {"erro": "lote vazio"})
             return
-        with psycopg.connect(DATABASE_URL) as conexao:
+        with open_database() as conexao:
             with conexao.transaction():
                 with conexao.cursor() as cursor:
                     cursor.execute("LOCK TABLE public.chamados IN SHARE ROW EXCLUSIVE MODE")
@@ -75,7 +83,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self.send_json(404, {"erro": "não encontrado"})
             return
-        with psycopg.connect(DATABASE_URL) as conexao:
+        with open_database() as conexao:
             with conexao.cursor() as cursor:
                 cursor.execute(f"SELECT n_os, dados FROM public.chamados WHERE {filtro}")
                 resultado = []

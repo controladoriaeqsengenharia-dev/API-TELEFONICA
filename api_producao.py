@@ -20,6 +20,102 @@ else:
 API_KEY = os.environ["API_KEY"]
 MAX_BODY = 250 * 1024 * 1024
 
+SWAGGER_HTML = """<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>API Telefonica - Swagger</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    window.onload = () => SwaggerUIBundle({
+      url: '/openapi.json',
+      dom_id: '#swagger-ui',
+      persistAuthorization: true
+    });
+  </script>
+</body>
+</html>"""
+
+
+OPENAPI = {
+    "openapi": "3.0.3",
+    "info": {
+        "title": "API Telefonica",
+        "description": "Consulta e carga dos chamados Telefonica.",
+        "version": "1.0.0",
+    },
+    "servers": [{"url": "/"}],
+    "components": {
+        "securitySchemes": {
+            "ApiKeyAuth": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "X-API-Key",
+            }
+        },
+        "schemas": {
+            "Chamado": {
+                "type": "object",
+                "additionalProperties": True,
+                "description": "Chamado com as colunas do relatório.",
+            },
+            "Carga": {
+                "type": "object",
+                "required": ["rows"],
+                "properties": {
+                    "rows": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["ativo", "n_os", "dados"],
+                            "properties": {
+                                "ativo": {"type": "string", "example": "MG"},
+                                "n_os": {"type": "integer", "example": 123456},
+                                "dados": {"$ref": "#/components/schemas/Chamado"},
+                            },
+                        },
+                    }
+                },
+            },
+        },
+    },
+    "paths": {
+        "/telefonica": {
+            "get": {
+                "summary": "Lista chamados gerais",
+                "security": [{"ApiKeyAuth": []}],
+                "responses": {"200": {"description": "Lista de chamados"}},
+            }
+        },
+        "/telefonica-sp": {
+            "get": {
+                "summary": "Lista chamados de São Paulo",
+                "security": [{"ApiKeyAuth": []}],
+                "responses": {"200": {"description": "Lista de chamados SP"}},
+            }
+        },
+        "/carga": {
+            "post": {
+                "summary": "Substitui a carga inteira",
+                "security": [{"ApiKeyAuth": []}],
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/Carga"}
+                        }
+                    },
+                },
+                "responses": {"200": {"description": "Carga concluída"}},
+            }
+        },
+    },
+}
+
 
 def open_database():
     if isinstance(DATABASE_CONNECTION, str):
@@ -73,6 +169,17 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json(200, {"linhas": len(linhas)})
 
     def do_GET(self):
+        if self.path == "/docs":
+            body = SWAGGER_HTML.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if self.path == "/openapi.json":
+            self.send_json(200, OPENAPI)
+            return
         if not self.authorized():
             self.send_json(404, {"erro": "não encontrado"})
             return

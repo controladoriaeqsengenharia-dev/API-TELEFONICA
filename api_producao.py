@@ -138,6 +138,8 @@ def open_database():
 
 
 def normalize(status):
+    if status is None:
+        return None
     return status.replace("Pendente Aprovação Gerente Nacional", "Concluida").replace(
         "Pendente Aprovação Gerente Regional", "Concluida"
     )

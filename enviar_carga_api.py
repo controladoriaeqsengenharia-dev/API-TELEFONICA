@@ -1,14 +1,14 @@
 import argparse
 import gzip
 import json
+import traceback
+from datetime import datetime
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from urllib.request import Request, urlopen
 
-from openpyxl import Workbook, load_workbook
+from openpyxl import load_workbook
 
 
-ATIVOS = ("CO", "ES", "MG", "NE", "NO", "PR", "RJ", "RS", "SC", "SP")
 CONSOLIDADOS = (
     ("GERAL", "CHAMADOS TELEFONICA.xlsx", "Planilha1"),
     ("SP", "TELEFONICA SP.xlsx", "sisteplant"),
@@ -38,32 +38,6 @@ def ler_relatorio(arquivo, aba=None, inicio=1):
         livro.close()
 
 
-def consolidar_relatorios(pasta):
-    with TemporaryDirectory(dir=pasta) as temporaria:
-        for grupo, nome, aba in CONSOLIDADOS:
-            livro = Workbook(write_only=True)
-            planilha = livro.create_sheet(aba)
-            cabecalho = None
-            for ativo in ATIVOS:
-                if (ativo == "SP") != (grupo == "SP"):
-                    continue
-                with_rows = ler_relatorio(pasta / f"chamados {ativo}.xlsx", inicio=7)
-                try:
-                    colunas = next(with_rows)
-                    if cabecalho is None:
-                        cabecalho = colunas
-                        planilha.append(colunas)
-                    elif colunas != cabecalho:
-                        raise ValueError(f"Cabeçalho divergente: {ativo}")
-                    for linha in with_rows:
-                        planilha.append(linha)
-                finally:
-                    with_rows.close()
-            livro.save(Path(temporaria) / nome)
-        for _, nome, _ in CONSOLIDADOS:
-            (Path(temporaria) / nome).replace(pasta / nome)
-
-
 def ler_lote(pasta):
     linhas = []
     arquivos = [pasta / nome for _, nome, _ in CONSOLIDADOS]
@@ -89,7 +63,14 @@ def main():
     parser.add_argument("url")
     parser.add_argument("chave")
     args = parser.parse_args()
-    print(enviar_carga(args.pasta, args.url, args.chave), flush=True)
+    try:
+        print(enviar_carga(args.pasta, args.url, args.chave), flush=True)
+    except Exception:
+        log = args.pasta / "ERRO_CARGA_TELEFONICA.txt"
+        with log.open("a", encoding="utf-8") as arquivo:
+            arquivo.write(f"\n{datetime.now().astimezone().isoformat(timespec='seconds')}\n")
+            arquivo.write(traceback.format_exc())
+        raise
 
 
 def enviar_carga(pasta, url, chave):
